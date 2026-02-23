@@ -58,7 +58,7 @@ chat = sessionify(dspy.Predict(chatsig))
 chat
 ```
 
-  Session(Predict, turns=0, history_field='history')
+    Session(Predict, turns=0, history_field='history')
 
 
 So If I introduce myself.
