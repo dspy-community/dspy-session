@@ -26,7 +26,7 @@ print(f"Python: {sys.version}")
 print(f"Working directory: {__import__('os').getcwd()}")
 ```
 
-```output:exec-1771857606421-kx85c
+```output:exec-1771932711329-wti1v
 Python: 3.13.3 (main, Apr  9 2025, 04:03:52) [Clang 20.1.0 ]
 Working directory: /home/maxime/Projects/dspy_session
 ```

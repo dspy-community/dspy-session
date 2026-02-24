@@ -1,6 +1,6 @@
 # dspy-session
 
-`dspy-session` adds stateful, multi-turn behavior to DSPy modules while staying adapter-agnostic.
+`dspy-session` adds stateful, multi-turn behavior to DSPy modules and provide goodies to help getting those turns ready for optimization.
 
 It works with:
 - `dspy.Predict` / `dspy.ChainOfThought`
@@ -14,7 +14,7 @@ It works with:
 ## Install
 
 ```bash
-pip install dspy-session
+uv pip install dspy-session
 ```
 
 ---
@@ -38,56 +38,62 @@ out = predictor(question="...", history=history)
 
 ## Examples
 
-### 1. Multi-turn Q&A — the basics
+### 1. Multi-turn Coding Agent — the basics
 
 Wrap any predictor with `sessionify`. Each call automatically accumulates
 conversation history so the model sees prior turns.
 
+First, if we want to let our Agent do any changes to our computer we have to give it a terminal. That is a simple way of doing it (not very safe, but for the demo it will do).
+
+```python
+import ast
+
+def exec_code(code_str):
+    """Execute arbitrary Python code string and return the result."""
+    return ast.literal_eval(code_str)
+```
+
+Now we can do the normal dspy setup step.
+
 ```python
 import dspy
-from dspy_session import sessionify
-
 dspy.configure(lm=dspy.LM("groq/moonshotai/kimi-k2-instruct-0905"))
-
-class chatsig(dspy.Signature):
-    """You are a helpful assistant"""
-    user: str = dspy.InputField()
-    assistant: str = dspy.OutputField()
-
-chat = sessionify(dspy.Predict(chatsig))
-chat
+agent_program = dspy.ReAct("user -> assistant", tools=[exec_code])
 ```
 
-```output:exec-1771888378623-fs68e
-Session(Predict, turns=0, history_field='history')
+... and now we sessionify it!
+
+```python
+from dspy_session import sessionify
+chat = sessionify(agent_program)
 ```
 
-
-So If I introduce myself.
+Here is the delightful part:
 
 ```python
 chat(user="Hi! My name is Max")
 ```
 
-```output:exec-1771888390725-rus14
+```output:exec-1771939129312-zted6
 Prediction(
     assistant='Hi Max! Nice to meet you. How can I help you today?'
 )
 ```
 
-The model now knows my name.
 
-```python
+```py
 chat(user="What is my name?")
 ```
 
-```output:exec-1771888395018-jxi0s
+```output:exec-1771939152184-tp0hj
 Prediction(
     assistant='Your name is Max.'
 )
 ```
 
-And we can see the underlying structure that the session object is constructing and maintaining:
+`sessionify` returns a session object that you can call like a function and it manages and remembers the previous turns for you.
+
+Under the hood, turns hold their whole history.
 
 ```python
 chat.turns
@@ -119,6 +125,8 @@ chat.turns
 ]
 ```
 
+Their are many different nice utilities of the `session`. See lower in the readme for more details on that.
+
 ```python
 print(chat.session_history)
 ```
@@ -129,8 +137,6 @@ messages=[
 	{'user': 'What is my name?', 'assistant': 'Your name is Max.'}
 ]
 ```
-
-
 
 **What happens under the hood:**
 1. `sessionify` deep-copies the module and adds a `history` input field to its signature
@@ -143,32 +149,31 @@ messages=[
 ### 2. Composed module wrappers (no signature changes needed)
 
 `sessionify` also works with `dspy.Module` classes that call nested predictors.
+
 Your module stays unchanged; history is injected automatically.
 
 ```python
 import dspy
 from dspy_session import sessionify
 
-dspy.configure(lm=dspy.LM("openai/gpt-4o-mini"))
+dspy.configure(lm=dspy.LM("groq/moonshotai/kimi-k2-instruct-0905"))
 
-class TravelAdvice(dspy.Signature):
-    """Give helpful travel advice."""
-    question: str = dspy.InputField()
-    advice: str = dspy.OutputField()
+sig = dspy.Signature('question -> travel_advice')
+sig.instructions = "Give helpful and extremely brief travel advice."
 
 class TravelAgent(dspy.Module):
     def __init__(self):
         super().__init__()
-        self.advisor = dspy.ChainOfThought(TravelAdvice)
+        self.advisor = dspy.Predict(sig)
 
     def forward(self, question):
-        return self.advisor(question=question)
+        return self.advisor(question=question).travel_advice
 
 travel = sessionify(TravelAgent())
 travel
 ```
 
-```output
+```output:exec-1771939621005-ccf45
 Session(TravelAgent, turns=0, history_field='history')
 ```
 
@@ -176,68 +181,48 @@ Session(TravelAgent, turns=0, history_field='history')
 travel(question="I'm planning a 2-week trip to Japan in April.")
 ```
 
-```output
-Prediction(
-    advice='April is perfect for cherry blossoms! I'd suggest splitting time between Tokyo, Kyoto, and Osaka...'
-)
+```output:exec-1771939625534-b39br
+'Book sakura spots early (peak bloom). Get 14-day JR Pass; activate at airport. Base Tokyo 5d, Kyoto 4d, Osaka 2d, day-trip Nara/Hakone. Pack layers (10-20°C). Cash is king; 7-Eleven ATMs work. Pocket Wi-Fi pickup at arrivals. Slurp noodles, no tipping.'
 ```
 
 ```python
 travel(question="What should I pack for the weather?")
 ```
 
-```output
-Prediction(
-    advice='For Japan in April, expect mild temperatures (10-20°C). Pack layers, a light rain jacket, and comfortable walking shoes...'
-)
-```
-
-```python
-travel(question="Any food recommendations for the cities you mentioned?")
-```
-
-```output
-Prediction(
-    advice='In Tokyo, try Tsukiji Outer Market for sushi. In Kyoto, don't miss kaiseki dining. In Osaka, head to Dotonbori for takoyaki and okonomiyaki...'
-)
+```output:exec-1771939633005-6epq3
+'Pack layers: light sweater, rain jacket, T-shirts. Temps 10-20 °C, early cherry blossom showers.'
 ```
 
 ```python
 travel.turns
 ```
 
-```output:exec-1771897651099-y6i52
+```output:exec-1771939642102-ua4vh
 [
-	Turn(
-		index=0,
-		inputs={'question': "I'm planning a 2-week trip to Japan in April."},
-		outputs={'advice': 'Book sakura spots now (peak season). 7-day JR Pass + 3 days Tokyo, 3 Kyoto, 2 Osaka base. Add Hakone or Nara day-trips. Reserve early for April 29–May 5 Golden Week crowds.'},
-		history_snapshot=History(messages=[]),
-		score=None
-	),
-	Turn(
-		index=1,
-		inputs={'question': 'What should I pack for the weather?'},
-		outputs={'advice': 'Layers: light jacket, hoodie, tees; 12-20 °C, rain gear, comfy shoes.'},
-		history_snapshot=History(messages=[
-			{'question': "I'm planning a 2-week trip to Japan in April.", 'advice': 'Book sakura spots now (peak season). 7-day JR Pass + 3 days Tokyo, 3 Kyoto, 2 Osaka base. Add Hakone or Nara day-trips. Reserve early for April 29–May 5 Golden Week crowds.'}
-		]),
-		score=None
-	),
-	Turn(
-		index=2,
-		inputs={'question': 'Any food recommendations for the cities you mentioned?'},
-		outputs={'advice': 'Tokyo: sushi at Tsukiji Outer, ramen in Shibuya. Kyoto: tofu kaiseki, matcha sweets. Osaka: takoyaki, okonomiyaki on Dotonbori. Grab 7-Eleven egg sandwiches everywhere.'},
-		history_snapshot=History(messages=[
-			{'question': "I'm planning a 2-week trip to Japan in April.", 'advice': 'Book sakura spots now (peak season). 7-day JR Pass + 3 days Tokyo, 3 Kyoto, 2 Osaka base. Add Hakone or Nara day-trips. Reserve early for April 29–May 5 Golden Week crowds.'},
-			{'question': 'What should I pack for the weather?', 'advice': 'Layers: light jacket, hoodie, tees; 12-20 °C, rain gear, comfy shoes.'}
-		]),
-		score=None
-	)
+    Turn(
+        index=0,
+        inputs={'question': "I'm planning a 2-week trip to Japan in April."},
+        outputs={'output': 'Book sakura spots early (peak bloom). Get 14-day JR Pass; activate at airport. Base Tokyo 5d, Kyoto 4d, Osaka 2d, day-trip Nara/Hakone. Pack layers (10-20°C). Cash is king; 7-Eleven ATMs work. Pocket Wi-Fi pickup at arrivals. Slurp noodles, no tipping.'},
+        history_snapshot=History(messages=[]),
+        score=None
+    ),
+    Turn(
+        index=1,
+        inputs={'question': 'What should I pack for the weather?'},
+        outputs={'output': 'Pack layers: light sweater, rain jacket, T-shirts. Temps 10-20 °C, early cherry blossom showers.'},
+        history_snapshot=History(
+            messages=[
+                {
+                    'question': "I'm planning a 2-week trip to Japan in April.",
+                    'output': 'Book sakura spots early (peak bloom). Get 14-day JR Pass; activate at airport. Base Tokyo 5d, Kyoto 4d, Osaka 2d, day-trip Nara/Hakone. Pack layers (10-20°C). Cash is king; 7-Eleven ATMs work. Pocket Wi-Fi pickup at arrivals. Slurp noodles, no tipping.'
+                }
+            ]
+        ),
+        score=None
+    )
 ]
 ```
 
-By turn 3, the agent remembers the destination and prior suggestions without any manual history plumbing in `forward()`.
 
 ---
 
