@@ -385,7 +385,7 @@ when collecting training data from real user conversations where some turns may 
 import dspy
 from dspy_session import Session, sessionify
 
-dspy.configure(lm=dspy.LM("openai/gpt-4o-mini"))
+dspy.configure(lm=dspy.LM("groq/moonshotai/kimi-k2-instruct-0905"))
 
 class CodeHelp(dspy.Signature):
     """Help the user with their coding question. Include a code example."""
@@ -393,6 +393,7 @@ class CodeHelp(dspy.Signature):
     answer: str = dspy.OutputField()
 
 session = sessionify(dspy.Predict(CodeHelp))
+session(question="Hello")
 session(question="How do I read a CSV file in Python?")
 session(question="What if the file is really large?")
 session(question="How do I filter rows where age > 30?")
@@ -414,6 +415,11 @@ strict_examples = session.to_examples(
     strict_trajectory=True,
 )
 print(f"Strict kept: {len(strict_examples)} turns")
+```
+
+```output:exec-1771939952636-ohw2c
+Kept 3 of 4 turns
+Strict kept: 0 turns
 ```
 
 #### Merging examples from multiple sessions
