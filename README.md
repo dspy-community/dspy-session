@@ -206,47 +206,34 @@ Prediction(
 travel.turns
 ```
 
-```output
+```output:exec-1771897651099-y6i52
 [
-    Turn(
-        index=0,
-        inputs={'question': "I'm planning a 2-week trip to Japan in April."},
-        outputs={'advice': 'April is perfect ...'},
-        history_snapshot=History(messages=[]),
-        score=None
-    ),
-    Turn(
-        index=1,
-        inputs={'question': 'What should I pack for the weather?'},
-        outputs={'advice': 'For Japan in April, expect mild temperatures (10-20°C). ...'},
-        history_snapshot=History(
-            messages=[
-                {
-                    'question': "I'm planning a 2-week trip to Japan in April.",
-                    'advice': 'April is perfect for cherry blossoms! ...'
-                }
-            ]
-        ),
-        score=None
-    ),
-    Turn(
-        index=2,
-        inputs={'question': 'Any food recommendations for the cities you mentioned?'},
-        outputs={'advice': 'In Tokyo, try Tsukiji ...'},
-        history_snapshot=History(
-            messages=[
-                {
-                    'question': "I'm planning a 2-week trip to Japan in April.",
-                    'advice': 'April is perfect for cherry blossoms! ...'
-                },
-                {
-                    'question': 'What should I pack for the weather?',
-                    'advice': 'For Japan in April, expect mild temperatures ...'
-                }
-            ]
-        ),
-        score=None
-    )
+	Turn(
+		index=0,
+		inputs={'question': "I'm planning a 2-week trip to Japan in April."},
+		outputs={'advice': 'Book sakura spots now (peak season). 7-day JR Pass + 3 days Tokyo, 3 Kyoto, 2 Osaka base. Add Hakone or Nara day-trips. Reserve early for April 29–May 5 Golden Week crowds.'},
+		history_snapshot=History(messages=[]),
+		score=None
+	),
+	Turn(
+		index=1,
+		inputs={'question': 'What should I pack for the weather?'},
+		outputs={'advice': 'Layers: light jacket, hoodie, tees; 12-20 °C, rain gear, comfy shoes.'},
+		history_snapshot=History(messages=[
+			{'question': "I'm planning a 2-week trip to Japan in April.", 'advice': 'Book sakura spots now (peak season). 7-day JR Pass + 3 days Tokyo, 3 Kyoto, 2 Osaka base. Add Hakone or Nara day-trips. Reserve early for April 29–May 5 Golden Week crowds.'}
+		]),
+		score=None
+	),
+	Turn(
+		index=2,
+		inputs={'question': 'Any food recommendations for the cities you mentioned?'},
+		outputs={'advice': 'Tokyo: sushi at Tsukiji Outer, ramen in Shibuya. Kyoto: tofu kaiseki, matcha sweets. Osaka: takoyaki, okonomiyaki on Dotonbori. Grab 7-Eleven egg sandwiches everywhere.'},
+		history_snapshot=History(messages=[
+			{'question': "I'm planning a 2-week trip to Japan in April.", 'advice': 'Book sakura spots now (peak season). 7-day JR Pass + 3 days Tokyo, 3 Kyoto, 2 Osaka base. Add Hakone or Nara day-trips. Reserve early for April 29–May 5 Golden Week crowds.'},
+			{'question': 'What should I pack for the weather?', 'advice': 'Layers: light jacket, hoodie, tees; 12-20 °C, rain gear, comfy shoes.'}
+		]),
+		score=None
+	)
 ]
 ```
 
@@ -264,7 +251,7 @@ history focused on the actual dialogue.
 import dspy
 from dspy_session import sessionify
 
-dspy.configure(lm=dspy.LM("openai/gpt-4o-mini"))
+dspy.configure(lm=dspy.LM("groq/moonshotai/kimi-k2-instruct-0905"))
 
 class RAGAnswer(dspy.Signature):
     """Answer the question using the provided context."""
@@ -301,6 +288,12 @@ print(session.turns[0].inputs.keys())
 # dict_keys(['question', 'context'])  — context is preserved in the turn record
 ```
 
+```output:exec-1771897813447-jollu
+dict_keys(['question', 'answer'])
+dict_keys(['question', 'answer'])
+dict_keys(['question', 'context'])
+```
+
 You can also use `history_input_fields` to allow-list only specific fields instead:
 
 ```python
@@ -322,7 +315,7 @@ its history snapshot — ready for DSPy optimizers like `BootstrapFewShot`.
 import dspy
 from dspy_session import Session, sessionify
 
-dspy.configure(lm=dspy.LM("openai/gpt-4o-mini"))
+dspy.configure(lm=dspy.LM("groq/moonshotai/kimi-k2-instruct-0905"))
 
 class MathTutor(dspy.Signature):
     """You are a patient math tutor. Explain step by step."""
@@ -341,34 +334,67 @@ examples = session.to_examples()
 
 print(f"Generated {len(examples)} training examples")
 # Generated 4 training examples
+```
 
-# Example 0: no prior history (it was the first turn)
+Example 0: no prior history (it was the first turn)
+
+```python
 ex0 = examples[0]
 print(f"  Input: {ex0.question}")
 print(f"  History length: {len(ex0.history.messages)}")
 print(f"  Label: {ex0.explanation[:60]}...")
-# Input: What is a derivative?
-# History length: 0
-# Label: A derivative measures the rate of change of a function...
+```
 
-# Example 2: has 2 prior turns as history
+```output:exec-1771898045472-puc52
+  Input: What is a derivative?
+  History length: 0
+  Label: Imagine you’re driving along a straight road.  
+- At any ins...
+```
+
+Example 2: has 2 prior turns as history
+
+```python
 ex2 = examples[2]
 print(f"  Input: {ex2.question}")
 print(f"  History length: {len(ex2.history.messages)}")
-# Input: What about the chain rule?
-# History length: 2
+```
 
-# These examples are ready for optimization
+```output:exec-1771898073344-lb49l
+  Input: What about the chain rule?
+  History length: 2
+```
+
+These examples are ready for optimization
+
+```python
 optimized = dspy.BootstrapFewShot().compile(session, trainset=examples)
 ```
+
+```output:exec-1771898085472-e7vtk
+100% 4/4 [00:00<00:00, 73.55it/s]
+Bootstrapped 4 full traces after 3 examples for up to 1 rounds, amounting to 4 attempts.
+```
+
+
+```python
+optimized(question = "What's the derivative of x³?")
+```
+
+```output:exec-1771897983503-gdqz9
+Prediction(
+    explanation='Let’s find the derivative of f(x) = x³ from the definition, just like we did for x².\n\n1. Write the limit definition:  \n   f′(x) = lim_{h→0} [f(x + h) – f(x)] / h  \n   = lim_{h→0} [(x + h)³ – x³] / h.\n\n2. Expand (x + h)³:  \n   (x + h)³ = x³ + 3x²h + 3xh² + h³.\n\n3. Subtract x³ and simplify:  \n   [(x³ + 3x²h + 3xh² + h³) – x³] / h  \n   = [3x²h + 3xh² + h³] / h  \n   = 3x² + 3xh + h².\n\n4. Take the limit as h → 0:  \n   lim_{h→0} (3x² + 3xh + h²) = 3x².\n\nSo the derivative of x³ is 3x².'
+)
+```
+
+
 
 ---
 
 ### 5. Quality filtering with metrics
 
 Score each turn and filter to only keep high-quality examples. This is critical
-when collecting training data from real user conversations where some turns may
-be low quality.
+when collecting training data from real user conversations where some turns may be low quality.
 
 ```python
 import dspy
