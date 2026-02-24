@@ -30,7 +30,7 @@ class TranslateText(dspy.Signature):
     """Translate corrected text into the requested target language."""
 
     corrected: str = dspy.InputField(desc="Already-corrected text")
-    target_language: str = dspy.InputField(desc="Language code or name, e.g. 'French' or 'es'" )
+    target_language: str = dspy.InputField(desc="Language code or name, e.g. 'French' or 'es'")
     translated: str = dspy.OutputField(desc="Translated output")
 
 
@@ -122,7 +122,10 @@ print(chat_translate.session_history)
 
 ---
 
-## 4) Full runnable snippet
+## 4) Full runnable snippet (fixed target language setup)
+
+This variant stores a fixed `target_language` at module init (the error in the
+previous example came from not storing it before using it in `forward()`).
 
 ```python
 import dspy
@@ -140,16 +143,17 @@ class TranslateText(dspy.Signature):
 
 
 class CorrectThenTranslate(dspy.Module):
-    def __init__(self):
+    def __init__(self, target_language: str):
         super().__init__()
-        self.corrector = dspy.ChainOfThought(CorrectText)
-        self.translator = dspy.ChainOfThought(TranslateText)
+        self.target_language = target_language
+        self.corrector = dspy.Predict(CorrectText)
+        self.translator = dspy.Predict(TranslateText)
 
-    def forward(self, text: str, target_language: str):
+    def forward(self, text: str):
         corrected_pred = self.corrector(text=text)
         translated_pred = self.translator(
             corrected=corrected_pred.corrected,
-            target_language=target_language,
+            target_language=self.target_language,
         )
         return dspy.Prediction(
             corrected=corrected_pred.corrected,
@@ -157,17 +161,11 @@ class CorrectThenTranslate(dspy.Module):
         )
 
 
-dspy.configure(lm=dspy.LM("openai/gpt-4o-mini"))
-session = sessionify(CorrectThenTranslate())
+dspy.configure(lm=dspy.LM("openai/gpt-4.1"))
+session = sessionify(CorrectThenTranslate(target_language="French"))
 
-r1 = session(text="I can haz an invoice by tomorow", target_language="French")
-print(r1.corrected)
-print(r1.translated)
+print(session(text="This plant is red").translated)
+print(session(text="Can I have it?").translated)
 
-r2 = session(text="Now in Japanese", target_language="Japanese")
-print(r2.corrected)
-print(r2.translated)
-
-print(len(session.turns))
 print(session.session_history)
 ```
