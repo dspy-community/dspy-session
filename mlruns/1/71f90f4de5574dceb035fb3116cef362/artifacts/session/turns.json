@@ -1,0 +1,24 @@
+[
+  {
+    "index": 0,
+    "inputs": {
+      "question": "Hi, my name is Max"
+    },
+    "outputs": {
+      "answer": "Hi Max\u2014nice to meet you! How can I help you today?"
+    },
+    "score": null,
+    "history_length": 0
+  },
+  {
+    "index": 1,
+    "inputs": {
+      "question": "What is my name?"
+    },
+    "outputs": {
+      "answer": "Your name is Max."
+    },
+    "score": null,
+    "history_length": 1
+  }
+]

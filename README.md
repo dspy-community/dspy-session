@@ -731,7 +731,7 @@ import asyncio
 import dspy
 from dspy_session import sessionify
 
-dspy.configure(lm=dspy.LM("openai/gpt-4o-mini"))
+dspy.configure(lm=dspy.LM("groq/moonshotai/kimi-k2-instruct-0905"))
 
 class Chat(dspy.Signature):
     """A friendly conversational assistant."""
@@ -752,6 +752,14 @@ async def main():
 asyncio.run(main())
 ```
 
+```output:exec-1771942011122-p2j62
+Hey there! For most beginners, I’d recommend Python: it reads almost like plain English, has a huge, welcoming community, and you can use it for everything from simple scripts to data science to web apps. If you’re more interested in front-end web work, JavaScript is a close second—start with HTML/CSS, then add JS to make pages interactive. Either way, pick one, follow a short tutorial, and build tiny projects right away—momentum matters more than the language!
+
+Python hits the “sweet spot” for beginners: its syntax is clean—no curly braces or semicolons to forget—so you focus on problem-solving, not punctuation. It’s also instantly rewarding: one-liner “Hello, world!” and a huge standard library mean you can do real things (automate boring stuff, make a game, analyze data) within hours. Finally, the ecosystem is massive—YouTube tutorials, free books, forums like Stack Overflow—so help is always one search away. In short, you get quick wins, gentle learning curve, and skills that transfer to almost any tech field.
+
+Turns: 2
+```
+
 Lock options:
 - `"none"` (default) — no synchronization
 - `"thread"` — `threading.Lock` for multi-threaded apps
@@ -769,7 +777,7 @@ policies handle this:
 import dspy
 from dspy_session import sessionify
 
-dspy.configure(lm=dspy.LM("openai/gpt-4o-mini"))
+dspy.configure(lm=dspy.LM("groq/moonshotai/kimi-k2-instruct-0905"))
 
 class QA(dspy.Signature):
     question: str = dspy.InputField()
@@ -808,6 +816,13 @@ session3(
 print(len(session3.turns))  # 1 (old turns cleared, new turn recorded)
 ```
 
+```output:exec-1771942073677-mw9dk
+1
+1
+2
+1
+```
+
 ---
 
 ### 12. Turn callbacks (`on_turn`)
@@ -820,7 +835,7 @@ turn.
 import dspy
 from dspy_session import sessionify
 
-dspy.configure(lm=dspy.LM("openai/gpt-4o-mini"))
+dspy.configure(lm=dspy.LM("groq/moonshotai/kimi-k2-instruct-0905"))
 
 class QA(dspy.Signature):
     question: str = dspy.InputField()
@@ -841,101 +856,21 @@ session(question="Who created it?")
 #   History depth: 1
 ```
 
+```output:exec-1771942150547-3hl8h
+[Turn 0] Q: What is Python? → A: Python is a high-level, interpreted programming language known for its clear, readable syntax and versatility. Created by Guido van Rossum and first released in 1991, it supports multiple programming paradigms—procedural, object-oriented, and functional—and ships with a comprehensive standard library. Python is widely used in web development, data science, automation, artificial intelligence, and more, and is commonly referred to as a “batteries-included” language because of the wealth of ready-to-use modules it provides.
+  History depth: 0
+[Turn 1] Q: Who created it? → A: Guido van Rossum created Python.
+  History depth: 1
+Out[52]: 
+Prediction(
+    answer='Guido van Rossum created Python.'
+)
+```
+
 Notes:
 - `on_turn` is **not** called for stateless pass-through (`history_policy="override"` with explicit history) — only for turns that are actually recorded.
 - Errors in the callback are caught and logged as warnings — they never break the session.
 - Forked sessions share the same callback reference.
-
----
-
-### 13. MLflow integration
-
-`dspy-session` ships with an optional MLflow integration module for experiment
-tracking, turn-level metrics, and model registry. Requires `mlflow >= 2.18`
-(for the `mlflow.dspy` flavor). MLflow is **not** a required dependency — it's
-imported lazily and only needed when you use these features.
-
-```bash
-pip install 'mlflow>=2.18'
-```
-
-#### Log a completed session
-
-Snapshot an entire session as a single MLflow run — params, per-turn step
-metrics, and artifacts (session state, turns detail, linearized examples).
-
-```python
-from dspy_session.integrations.mlflow import log_session
-
-session = sessionify(module)
-session(question="Hi")
-session(question="Follow up")
-
-run_id = log_session(session, experiment="my_chatbot")
-```
-
-What gets logged:
-- **Params**: `session.history_field`, `history_policy`, `module_type`, etc.
-- **Step metrics**: `turn_score` and `history_length` per turn (if scored)
-- **Aggregate metrics**: `score_mean`, `score_min`, `score_max`
-- **Artifacts**: `session_state.json`, `turns.json`, `examples.json`
-
-#### Log examples as an MLflow dataset
-
-```python
-from dspy_session.integrations.mlflow import log_examples
-
-with mlflow.start_run():
-    log_examples(session, dataset_name="chatbot_v1", metric=my_metric, min_score=0.5)
-```
-
-#### Live per-turn logging
-
-Use `mlflow_turn_logger()` as an `on_turn` hook — it starts an MLflow run on
-the first turn and logs metrics at each step in real time.
-
-```python
-from dspy_session.integrations.mlflow import mlflow_turn_logger
-
-tracker = mlflow_turn_logger(experiment="my_chatbot")
-session = sessionify(module, on_turn=tracker)
-
-session(question="Hi")        # starts MLflow run, logs step 0
-session(question="Follow up") # logs step 1
-session(question="Thanks!")   # logs step 2
-
-# When the conversation is done, finalize the run
-tracker.end(session)  # saves session state artifact and closes the run
-```
-
-#### Model registry
-
-Save and load both the DSPy module and session state together.
-
-```python
-from dspy_session.integrations.mlflow import log_model, load_model
-
-# Save — logs module via mlflow.dspy + session state as sibling artifact
-with mlflow.start_run():
-    log_model(session, artifact_path="session")
-
-# Load — restores both the module and accumulated session state
-restored = load_model("runs:/<run_id>/session", module=MyModule())
-print(len(restored.turns))  # turns are restored
-```
-
----
-
-## TemplateAdapter integration
-
-`dspy-session` and `dspy-template-adapter` work extremely well together:
-
-- `dspy-session` handles state/history lifecycle
-- `TemplateAdapter` gives exact prompt-layout control
-
-👉 See the full integration guide (including contrived layouts like "all history in system", "all in user", and split strategies):
-
-- [`docs/template-adapter-integration.md`](docs/template-adapter-integration.md)
 
 ---
 

@@ -1,0 +1,45 @@
+{
+  "version": 2,
+  "history_field": "history",
+  "max_turns": null,
+  "max_stored_turns": null,
+  "copy_mode": "deep",
+  "exclude_fields": [
+    "history"
+  ],
+  "history_input_fields": null,
+  "history_policy": "override",
+  "turns": [
+    {
+      "index": 0,
+      "inputs": {
+        "question": "Hi"
+      },
+      "outputs": {
+        "answer": "Hi there! How can I help you today?"
+      },
+      "score": null
+    },
+    {
+      "index": 1,
+      "inputs": {
+        "question": "Follow up"
+      },
+      "outputs": {
+        "answer": "Sure\u2014what would you like to follow up on?"
+      },
+      "score": null
+    },
+    {
+      "index": 2,
+      "inputs": {
+        "question": "Thanks!"
+      },
+      "outputs": {
+        "answer": "You're welcome! Let me know if there's anything else I can do for you."
+      },
+      "score": null
+    }
+  ],
+  "initial_history": null
+}

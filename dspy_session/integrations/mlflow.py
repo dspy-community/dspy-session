@@ -76,9 +76,11 @@ def log_session(
     log_model_flag: bool = False,
     artifact_path: str = "session",
     tags: dict[str, str] | None = None,
-    end_run: bool = True,
 ) -> str:
     """Log a completed session to MLflow as a single run.
+
+    Call this **after** the conversation is done — it snapshots the current
+    session state (all accumulated turns, scores, examples).
 
     Logs:
     - Session config as params
@@ -96,8 +98,6 @@ def log_session(
         log_model_flag: If True, also log the inner module via mlflow.dspy.
         artifact_path: Artifact path prefix.
         tags: Optional tags for the run.
-        end_run: If True (default), end the run after logging.
-            Set False to add more logging to the same run.
 
     Returns:
         The MLflow run ID.
@@ -201,6 +201,8 @@ def log_examples(
 ) -> None:
     """Log session examples as an MLflow dataset to the active run.
 
+    Must be called inside an active ``mlflow.start_run()`` context.
+
     Args:
         session: A dspy_session.Session instance.
         dataset_name: Name for the MLflow dataset.
@@ -238,18 +240,25 @@ def mlflow_turn_logger(
     experiment: str | None = None,
     run_name: str | None = None,
 ):
-    """Create an on_turn callback that logs each turn to MLflow.
+    """Create an on_turn callback that logs each turn to MLflow in real time.
 
-    Returns a callable suitable for Session's on_turn hook.
-    The first call starts an MLflow run; subsequent calls log to it.
+    Returns a callable suitable for Session's ``on_turn`` hook.
+    The first turn starts an MLflow run; subsequent turns log to it as steps.
 
-    Usage:
-        session = sessionify(module, on_turn=mlflow_turn_logger())
-        session(question="Hi")        # starts run, logs step 0
+    **Important**: Call ``tracker.end(session)`` when the conversation is done
+    to finalize the run and save session state as an artifact.
+
+    Usage::
+
+        from dspy_session.integrations.mlflow import mlflow_turn_logger
+
+        tracker = mlflow_turn_logger(experiment="my_chatbot")
+        session = sessionify(dspy.Predict(QA), on_turn=tracker)
+
+        session(question="Hi")        # starts MLflow run, logs step 0
         session(question="Follow up") # logs step 1
 
-        # When done, call .end() on the logger to close the run
-        session.on_turn.end()
+        tracker.end(session)           # saves artifacts, closes the run
 
     Returns:
         A TurnLogger instance (callable).
@@ -283,7 +292,14 @@ def mlflow_turn_logger(
             mlflow.log_metric("total_turns", len(session.turns), step=step)
 
         def end(self, session=None):
-            """Finalize the run. Optionally log final session state."""
+            """Finalize the run. Optionally log final session state.
+
+            Args:
+                session: If provided, logs session state JSON as an artifact.
+
+            Returns:
+                The MLflow run ID, or None if no run was started.
+            """
             if self._run is None:
                 return None
 
@@ -311,6 +327,7 @@ def mlflow_turn_logger(
 def log_model(session, *, artifact_path: str = "session", **kwargs) -> None:
     """Log session's inner module to MLflow model registry.
 
+    Must be called inside an active ``mlflow.start_run()`` context.
     Also saves session state alongside the model.
 
     Args:
