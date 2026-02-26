@@ -19,6 +19,28 @@ Usage:
     examples = session.to_examples()
 """
 
-from dspy_session.session import Session, Turn, sessionify
+from dspy_session.session import (
+    Session,
+    SessionState,
+    Turn,
+    get_child_l1_ledger,
+    get_current_history,
+    get_execution_trace,
+    get_node_memory,
+    get_outer_history,
+    sessionify,
+    with_memory,
+)
 
-__all__ = ["Session", "Turn", "sessionify"]
+__all__ = [
+    "Session",
+    "SessionState",
+    "Turn",
+    "sessionify",
+    "with_memory",
+    "get_current_history",
+    "get_outer_history",
+    "get_node_memory",
+    "get_child_l1_ledger",
+    "get_execution_trace",
+]
