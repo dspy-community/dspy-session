@@ -454,7 +454,9 @@ Determines whether a nested child module maintains its own private history (`"is
 
 **Realistic scenario — isolated code executor:** Your agent has a `code_executor` that iteratively writes and debugs code over several internal calls per user turn. Each call builds on the previous attempt ("try again, but fix the import error"). You want the code executor to see its own chain of attempts, not the user's chat messages about what they want. Setting it to `"isolated"` gives it a private scratchpad. The parent can still read what the executor did via `get_child_l1_ledger("code_executor")`.
 
-**When not to use `"shared"`:** If the child needs to remember its own past work across calls (like a researcher that should know which queries it already tried), `"shared"` is wrong because it never records the child's calls. Use `"isolated"` instead so the child accumulates its own history.
+**Hybrid approach — isolated child that reads the parent too:** There is no `isolation="hybrid"` setting, but you can achieve the same thing. Set the child to `"isolated"` so it maintains its own private ledger, then call `get_outer_history()` inside the child's `forward()` to also read the parent's conversation. Both context variables are always available simultaneously. This gives you the best of both worlds: the child remembers its own past work AND can see what the user said to the parent. This is the right pattern for a researcher that needs to track its own queries (isolated ledger) but also needs to know what the user originally asked (outer history).
+
+**When not to use `"shared"`:** If the child needs to remember its own past work across calls (like a researcher that should know which queries it already tried), `"shared"` is wrong because it never records the child's calls. Use `"isolated"` (optionally with `get_outer_history()` for parent context) instead.
 
 ```python
 class Translate(dspy.Signature):
@@ -481,6 +483,49 @@ with app.use_state(state):
     app(question="Quelle est la météo?")
 # Shared mode: translator has no private ledger, it reads the parent's history
 print(len(state.node_states["translator"].turns))  # 0
+```
+
+Hybrid example — isolated child that also reads the parent conversation:
+
+```python
+class ResearchQuery(dspy.Signature):
+    """Generate a research query, informed by both own past queries and the user conversation."""
+    task: str = dspy.InputField()
+    user_context: str = dspy.InputField(desc="What the user asked the parent agent")
+    own_past_queries: str = dspy.InputField(desc="Queries this researcher already tried")
+    query: str = dspy.OutputField()
+
+class HybridResearcher(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.predict = dspy.Predict(ResearchQuery)
+
+    def forward(self, task):
+        # Read the parent's conversation to know what the user wants
+        outer = get_outer_history()
+        user_context = " | ".join(msg.get("question", "") for msg in outer.messages)
+        # Read own history to know what queries were already tried
+        own = get_current_history()
+        past_queries = " | ".join(msg.get("query", "") for msg in own.messages)
+        return self.predict(task=task, user_context=user_context or "None", own_past_queries=past_queries or "None")
+
+class HybridAgent(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.researcher = HybridResearcher()
+
+    def forward(self, question):
+        # Researcher is called multiple times per user turn
+        self.researcher(task=question)
+        self.researcher(task=f"dig deeper into: {question}")
+        return dspy.Prediction(answer="done")
+
+app = with_memory(HybridAgent(), recursive=True)
+state = app.new_state()
+with app.use_state(state):
+    app(question="What is quantum computing?")
+# Isolated: researcher recorded its own turns (2 internal calls)
+print(len(state.node_states["researcher"].turns))  # 2
 ```
 
 ### `lifespan`
