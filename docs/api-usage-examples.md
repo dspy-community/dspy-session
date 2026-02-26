@@ -984,11 +984,43 @@ The helpers below are deliberately limited. You might wonder: why can't a siblin
 
 **The correct alternative:** If the writer needs the researcher's discarded facts, the researcher must explicitly return them as an output field, and the orchestrator must explicitly pass them as an input to the writer. Data flows through the graph's edges (as `InputField` / `OutputField`), not via telepathy. This is the "Push, Don't Peek" principle: if Node A needs Node B's data, Node B must push it as an explicit output.
 
-**Why no all-to-all projection (panoptic):** Flattening every module's entire ledger into every other module's prompt causes two failures. First, token usage explodes — if you have 5 workers each looping 3 times, every LLM call re-tokenizes every other worker's scratchpad. Second, LLMs suffer from "Lost in the Middle" — flooding a strict `DateFormatter` with the `QueryPlanner`'s existential retry-loop statistically degrades the formatter's precision. Nodes work best under strict sensory deprivation: they should see only the exact tokens required for their specific job.
+**Why no all-to-all projection:** Flattening every module's entire ledger into every other module's prompt causes two failures. First, token usage explodes — if you have 5 workers each looping 3 times, every LLM call re-tokenizes every other worker's scratchpad. Second, LLMs suffer from "Lost in the Middle" — flooding a strict `DateFormatter` with the `QueryPlanner`'s existential retry-loop statistically degrades the formatter's precision. Nodes work best under strict sensory deprivation: they should see only the exact tokens required for their specific job.
 
 **Why no raw upward projection (inner-to-outer) by default:** In traditional software, `main()` does not read the local variables of its helper functions — it reads the returned result. If the outer orchestrator's context window is flooded with the exact syntax errors and dead-ends of its subordinate SQL generator, it loses focus on the user's macro-goal and starts micromanaging. This is abstraction leakage. The correct path is to use a `consolidator` to distill the inner node's messy retry loop into a clean summary (e.g., "The database lacks a users table"), and let the orchestrator consume that distilled fact via `get_node_memory()`.
 
 **The exception — meta-cognitive auditing:** There is exactly one valid reason to break encapsulation: when a module's literal job is to audit or supervise another module's reasoning process. A `MetaCritic` whose purpose is to diagnose logical flaws in a worker's trial-and-error trace needs to read that raw trace — it is the primary data payload, not just context. For this, `dspy-session` provides `get_child_l1_ledger()` and `get_execution_trace()` as advanced, opt-in helpers.
+
+### "But what if the user asks about internal state?"
+
+This is the most common pushback on "Push, Don't Peek," and it is a legitimate scenario. Imagine your agent has an internal `researcher` that visits websites. The user asks: "What websites did you look at?" The answer lives inside the researcher's private ledger. The outer agent needs access.
+
+There are three approaches, ranked from cleanest to most invasive:
+
+**Approach 1 — Push it as an explicit output (preferred).** Design the researcher to return the websites it visited as an explicit output field alongside its summary. The orchestrator receives `websites_visited` as a normal value, stores it in its own history, and when the user asks "what websites?", the answer is already in the orchestrator's conversation context. No encapsulation is broken. The optimizer can trace the full data flow.
+
+```python
+class Research(dspy.Signature):
+    """Research a topic and report which sources were used."""
+    question: str = dspy.InputField()
+    summary: str = dspy.OutputField()
+    sources_visited: str = dspy.OutputField(desc="Comma-separated list of URLs visited")
+
+class Agent(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.researcher = dspy.Predict(Research)
+
+    def forward(self, question):
+        result = self.researcher(question=question)
+        # sources_visited is now an explicit part of the data flow
+        return dspy.Prediction(answer=result.summary, sources=result.sources_visited)
+```
+
+**Approach 2 — Consolidate into long-term memory.** Make the researcher episodic with a consolidator that extracts "Websites visited: A, B, C" into `l2_memory`. The orchestrator can then access this via `get_node_memory()` in the researcher's next episode, or you can design the orchestrator to read the child's consolidated state. This works well when you don't need the raw details on every turn, just a summary of what happened.
+
+**Approach 3 — Supervisory projection (meta-cognitive exception).** Use `get_child_l1_ledger("researcher")` inside the orchestrator. This is architecturally valid here because the user is literally asking the agent to introspect on its own process — it is a meta-cognitive query. The orchestrator is acting as a supervisor reviewing the worker's log, which is exactly what `get_child_l1_ledger` was designed for. Just be aware that the optimizer cannot trace this data flow, so use it for introspection/debugging queries, not as the primary data pipeline.
+
+**The rule of thumb:** If the data is part of the agent's core answer (the user always needs to see sources), use Approach 1. If the data is supplementary context for future turns (the agent should remember what it found), use Approach 2. If the data is only needed when the user explicitly asks about the process (rare introspection), Approach 3 is fine.
 
 ### The four projection types
 
