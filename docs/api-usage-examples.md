@@ -7,11 +7,7 @@ Each snippet uses real DSPy signatures and modules that reflect the scenario bei
 
 ## Shared setup used in snippets
 
-Every snippet below assumes this setup block has been run first. It configures an LLM and imports everything you need.
-
-`dspy.LM("openai/gpt-4o-mini")` creates a lightweight language model client. Under the hood, DSPy uses [LiteLLM](https://docs.litellm.ai/) as a universal routing layer, which means the string you pass follows the format `"provider/model-name"`. For example, `"openai/gpt-4o-mini"`, `"anthropic/claude-3-haiku-20240307"`, or `"together_ai/meta-llama/Llama-3-8b-chat-hf"`. LiteLLM translates these into the correct API calls for each provider, so you only need to set the appropriate API key as an environment variable (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) and swap the model string — nothing else in your code changes.
-
-We use `gpt-4o-mini` here because it is cheap and fast, making it a good default for running examples and experiments. If you want to use a different model, just change the string. If you don't have an API key at all and want to run these examples purely locally, you can point to a local model via Ollama (e.g., `"ollama/llama3"`) or any other LiteLLM-compatible provider.
+Every snippet below assumes this setup block has been run first. It configures a cheap LLM and imports everything you need. Swap the model string for whatever provider and model you prefer.
 
 ```python
 import asyncio
@@ -32,7 +28,7 @@ from dspy_session import (
 )
 
 # Configure a cheap LLM — swap this for any provider/model you prefer.
-dspy.configure(lm=dspy.LM("groq/moonshotai/kimi-k2-instruct-0905"))
+dspy.configure(lm=dspy.LM("openai/gpt-4o-mini"))
 ```
 
 ---
